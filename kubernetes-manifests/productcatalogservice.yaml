@@ -43,7 +43,7 @@ spec:
               - ALL
           privileged: false
           readOnlyRootFilesystem: true
-        image: productcatalogservice
+        image: kumarashish086/productcatalogservice:2
         ports:
         - containerPort: 3550
         env:
