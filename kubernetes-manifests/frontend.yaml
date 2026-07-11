@@ -44,7 +44,7 @@ spec:
                 - ALL
             privileged: false
             readOnlyRootFilesystem: true
-          image: kumarashish086/frontend:10
+          image: kumarashish086/frontend:12
           ports:
           - containerPort: 8080
           readinessProbe:
