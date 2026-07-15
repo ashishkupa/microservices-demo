@@ -43,7 +43,7 @@ spec:
               - ALL
           privileged: false
           readOnlyRootFilesystem: true
-        image: adservice
+        image: kumarashish086/adservice:15
         ports:
         - containerPort: 9555
         env:
