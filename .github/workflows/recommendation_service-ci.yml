@@ -1,0 +1,42 @@
+name: recommendationservice CI
+
+# WHEN this runs: only on pushes or PRs that touch this service's folder.
+on:
+  push:
+    paths:
+      - "src/recommendationservice/**"
+  pull_request:
+    paths:
+      - "src/recommendationservice/**"
+
+jobs:
+  test:
+    name: Run unit tests
+    runs-on: ubuntu-latest
+
+    # WHERE the steps run: relative to the repo root by default, so we
+    # tell every step in this job to work from the service's own folder.
+    defaults:
+      run:
+        working-directory: src/recommendationservice
+
+    steps:
+      # Step 1: get the code onto the runner. Runners start EMPTY --
+      # no repo, no files -- this is what puts your code there.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: install the exact Python version we're targeting.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Step 3: install this service's dependencies, same as you did locally.
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      # Step 4: the actual check. If any assertion fails, this step exits
+      # non-zero, and GitHub marks the whole workflow as FAILED.
+      - name: Run tests
+        run: python -m pytest test_recommendation_server.py -v
