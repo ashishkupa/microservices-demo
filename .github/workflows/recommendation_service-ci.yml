@@ -1,15 +1,8 @@
 name: recommendationservice CI
 
-# WHEN this runs: only on pushes or PRs that touch this service's folder.
+# WHEN this runs: only manually, via the Actions tab (or API/CLI dispatch).
 on:
-  push:
-    paths:
-      - "src/recommendationservice/**"
-      - ".github/workflows/recommendation_service-ci.yml"
-  pull_request:
-    paths:
-      - "src/recommendationservice/**"
-      - ".github/workflows/recommendation_service-ci.yml"
+  workflow_dispatch: {}
 
 jobs:
   test:
