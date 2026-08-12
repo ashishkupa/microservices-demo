@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#testing a trivial change which is GHCR login only fires on push events. PR builds don't push. 
+
 import os
 import random
 import time
