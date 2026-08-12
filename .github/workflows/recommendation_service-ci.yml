@@ -132,7 +132,7 @@ jobs:
       - name: Update image on the cluster
         run: |
           kubectl set image deployment/recommendationservice \
-            recommendationservice=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            server=${{ env.IMAGE_NAME }}:${{ github.sha }} \
             -n ${{ env.NAMESPACE }}
 
       # Wait and confirm the rollout actually succeeds (new pods become
