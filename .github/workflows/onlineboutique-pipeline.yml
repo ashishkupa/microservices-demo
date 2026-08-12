@@ -73,13 +73,56 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build (and push only on direct pushes)
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           push: ${{ github.event_name == 'push' }}
+          load: true   # always load the image into the runner's local docker daemon, even on PRs where we don't push
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ matrix.name }}:${{ github.sha }}
             ${{ env.ECR_REGISTRY }}/${{ matrix.name }}:latest
+
+      # Reports an "image_build" event directly to Upwind's API. Upwind
+      # correlates this build-time metadata (image + commit + digest)
+      # against what its runtime sensor later observes actually running
+      # in the cluster -- this is the CI/CD-to-runtime correlation model.
+      - name: Integrate with Upwind
+        env:
+          IMAGE: ${{ env.ECR_REGISTRY }}/${{ matrix.name }}:${{ github.sha }}
+          IMAGE_SHA: ${{ steps.build.outputs.digest }}
+          UPWIND_API_ENDPOINT: https://api.eu.upwind.io
+          UPWIND_AUTH_ENDPOINT: https://auth.eu.upwind.io
+          UPWIND_ORGANIZATION_ID: ${{ secrets.UPWIND_ORGANIZATION_ID }}
+          UPWIND_CLIENT_SECRET: ${{ secrets.UPWIND_CLIENT_SECRET }}
+          UPWIND_CLIENT_ID: ${{ secrets.UPWIND_CLIENT_ID }}
+        run: |
+          # Get Access Token
+          response=$(curl -s --location "${UPWIND_AUTH_ENDPOINT}/oauth/token" \
+          --header "Content-Type: application/x-www-form-urlencoded" \
+          --data-urlencode "grant_type=client_credentials" \
+          --data-urlencode "audience=${UPWIND_API_ENDPOINT}" \
+          --data-urlencode "client_id=${UPWIND_CLIENT_ID}" \
+          --data-urlencode "client_secret=${UPWIND_CLIENT_SECRET}")
+          ACCESS_TOKEN=$(echo "$response" | jq -r '.access_token')
+          # Call Upwind API
+          curl -fsSL "${UPWIND_API_ENDPOINT}/v1/organizations/${UPWIND_ORGANIZATION_ID}/events" \
+          --request POST \
+          --write-out "\n%{http_code}" \
+          --header "Content-Type: application/json" \
+          --header "Authorization: Bearer ${ACCESS_TOKEN}" \
+          --data '{
+              "type": "image_build",
+              "reporter": "github_actions",
+              "data": {
+                  "image": "'"${IMAGE}"'",
+                  "commit_sha": "'"${GITHUB_SHA}"'",
+                  "repository": "https://github.com/'"${GITHUB_REPOSITORY}"'.git",
+                  "branch": "'"${GITHUB_REF_NAME}"'",
+                  "image_sha": "'"${IMAGE_SHA}"'",
+                  "build_time": "'"$(date +'%Y-%m-%dT%H:%M:%SZ')"'"
+              }
+          }'
 
   deploy:
     name: Deploy full app via Helm
