@@ -87,3 +87,57 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
+
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: build
+    # Only deploy on real pushes -- never on a PR. A PR's build job never
+    # even pushed an image, so there'd be nothing new to deploy anyway.
+    if: github.event_name == 'push'
+
+    # id-token: write is what lets this job request an OIDC token from
+    # GitHub at all. Without this, configure-aws-credentials fails
+    # immediately, even with everything else set up correctly.
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/recommendationservice
+      EKS_CLUSTER_NAME: upwind-lab-eks
+      AWS_REGION: eu-north-1
+      NAMESPACE: online-boutique
+
+    steps:
+      # This performs the actual OIDC handshake: request a token from
+      # GitHub, exchange it with AWS STS for short-lived credentials,
+      # scoped to exactly the role we created in Terraform. No secrets
+      # stored anywhere.
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::590183912334:role/github-actions-recommendationservice-cd
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Fetches connection details for the cluster and writes a
+      # kubeconfig file -- this is the one AWS-level permission
+      # (eks:DescribeCluster) our IAM role was granted.
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+
+      # This is the actual deployment: tell the existing Deployment to
+      # use the image we just built, tagged with this exact commit SHA.
+      # No new manifests applied -- just updating the image reference.
+      - name: Update image on the cluster
+        run: |
+          kubectl set image deployment/recommendationservice \
+            recommendationservice=${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -n ${{ env.NAMESPACE }}
+
+      # Wait and confirm the rollout actually succeeds (new pods become
+      # Ready) rather than just firing the update and walking away blind.
+      - name: Wait for rollout to complete
+        run: |
+          kubectl rollout status deployment/recommendationservice \
+            -n ${{ env.NAMESPACE }} --timeout=120s
